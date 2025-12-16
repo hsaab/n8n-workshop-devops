@@ -17,7 +17,7 @@ DISK_THRESHOLD = int(os.environ.get('DISK_THRESHOLD', '80'))
 
 # CloudWatch Agent user data script
 USER_DATA = '''#!/bin/bash
-yum install -y amazon-cloudwatch-agent
+yum install -y amazon-cloudwatch-agent stress-ng
 
 cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json << 'EOF'
 {
@@ -184,6 +184,26 @@ def lambda_handler(event, context):
             TreatMissingData='notBreaching'
         )
 
+        # Create CloudWatch alarm for CPU usage
+        cpu_alarm_name = f"workshop-{safe_username}-cpu-high"
+        cloudwatch.put_metric_alarm(
+            AlarmName=cpu_alarm_name,
+            AlarmDescription=f'CPU usage alert for workshop user {safe_username}',
+            ActionsEnabled=True,
+            AlarmActions=[SNS_TOPIC_ARN],
+            MetricName='CPUUtilization',
+            Namespace='AWS/EC2',
+            Statistic='Average',
+            Dimensions=[
+                {'Name': 'InstanceId', 'Value': instance_id}
+            ],
+            Period=60,
+            EvaluationPeriods=1,
+            Threshold=80,
+            ComparisonOperator='GreaterThanThreshold',
+            TreatMissingData='notBreaching'
+        )
+
         return {
             'success': True,
             'instance_id': instance_id,
@@ -191,7 +211,7 @@ def lambda_handler(event, context):
             'public_ip': public_ip,
             'username': safe_username,
             'exists': False,
-            'alarm_name': alarm_name,
+            'alarm_names': [alarm_name, cpu_alarm_name],
             'message': 'Instance provisioned successfully'
         }
 

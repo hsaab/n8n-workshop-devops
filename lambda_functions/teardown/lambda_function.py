@@ -32,7 +32,12 @@ def lambda_handler(event, context):
 
         # Sanitize username
         safe_username = ''.join(c for c in username if c.isalnum() or c in '-_').lower()
-        alarm_name = f"workshop-{safe_username}-disk-high"
+
+        # Both disk and CPU alarms to delete
+        alarm_names = [
+            f"workshop-{safe_username}-disk-high",
+            f"workshop-{safe_username}-cpu-high"
+        ]
 
         terminated_instances = []
         deleted_alarms = []
@@ -56,16 +61,16 @@ def lambda_handler(event, context):
             ec2.terminate_instances(InstanceIds=instance_ids)
             terminated_instances = instance_ids
 
-        # Delete CloudWatch alarm
+        # Delete CloudWatch alarms (both disk and CPU)
         try:
-            # Check if alarm exists first
-            alarms = cloudwatch.describe_alarms(AlarmNames=[alarm_name])
-            if alarms['MetricAlarms']:
-                cloudwatch.delete_alarms(AlarmNames=[alarm_name])
-                deleted_alarms.append(alarm_name)
-                print(f"Deleted alarm: {alarm_name}")
+            alarms = cloudwatch.describe_alarms(AlarmNames=alarm_names)
+            existing_alarms = [a['AlarmName'] for a in alarms['MetricAlarms']]
+            if existing_alarms:
+                cloudwatch.delete_alarms(AlarmNames=existing_alarms)
+                deleted_alarms = existing_alarms
+                print(f"Deleted alarms: {existing_alarms}")
         except ClientError as e:
-            print(f"Error deleting alarm: {e}")
+            print(f"Error deleting alarms: {e}")
 
         return {
             'success': True,

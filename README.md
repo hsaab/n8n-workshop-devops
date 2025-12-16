@@ -5,45 +5,48 @@ Terraform infrastructure for an n8n DevOps workshop where participants provision
 ## Overview
 
 This project creates AWS infrastructure that allows workshop participants to:
-- Provision their own EC2 instance
-- Simulate disk space issues
+- Provision their own EC2 instance with CloudWatch monitoring
+- Simulate disk space issues and CPU spikes
 - Receive CloudWatch alerts via n8n webhooks
+- Use AI agents to decide on remediation actions
 - Clean up resources when done
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              n8n Workflow                                    │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐                 │
-│  │ Provision│   │Fill Disk │   │Reset Disk│   │ Teardown │                 │
-│  └────┬─────┘   └────┬─────┘   └────┬─────┘   └────┬─────┘                 │
-└───────┼──────────────┼──────────────┼──────────────┼────────────────────────┘
-        │              │              │              │
-        ▼              ▼              ▼              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            AWS Lambda Functions                              │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐                 │
-│  │ provision│   │fill_disk │   │reset_disk│   │ teardown │                 │
-│  └────┬─────┘   └────┬─────┘   └────┬─────┘   └────┬─────┘                 │
-└───────┼──────────────┼──────────────┼──────────────┼────────────────────────┘
-        │              │              │              │
-        ▼              │              │              ▼
-┌───────────────┐      │              │      ┌───────────────┐
-│     EC2       │◄─────┴──────────────┘      │  CloudWatch   │
-│   Instance    │         SSM Commands       │    Alarms     │
-│ (per user)    │                            └───────┬───────┘
-└───────┬───────┘                                    │
-        │                                            ▼
-        │ CloudWatch                          ┌───────────────┐
-        │ Agent Metrics                       │  SNS Topic    │
-        └─────────────────────────────────────►───────┬───────┘
-                                                      │
-                                                      ▼
-                                              ┌───────────────┐
-                                              │ n8n Webhook   │
-                                              │ (Alert Handler│
-                                              └───────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                                     n8n Workflow                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐ │
+│  │ Provision│ │Fill Disk │ │Reset Disk│ │Spike CPU │ │ Teardown │ │ Kill and Restart  │ │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────────┬─────────┘ │
+└───────┼────────────┼────────────┼────────────┼────────────┼─────────────────┼────────────┘
+        │            │            │            │            │                 │
+        ▼            ▼            ▼            ▼            ▼                 ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                                  AWS Lambda Functions                                     │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐ │
+│  │ provision│ │fill_disk │ │reset_disk│ │spike_cpu │ │ teardown │ │ kill_and_restart  │ │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────────┬─────────┘ │
+└───────┼────────────┼────────────┼────────────┼────────────┼─────────────────┼────────────┘
+        │            │            │            │            │                 │
+        ▼            │            │            │            ▼                 │
+┌───────────────┐    │            │            │    ┌───────────────┐         │
+│     EC2       │◄───┴────────────┴────────────┴────│  CloudWatch   │         │
+│   Instance    │         SSM Commands              │    Alarms     │◄────────┘
+│ (per user)    │                                   │ (Disk + CPU)  │    EC2 Reboot
+└───────┬───────┘                                   └───────┬───────┘
+        │                                                   │
+        │ CloudWatch                                        ▼
+        │ Agent Metrics                             ┌───────────────┐
+        │ + CPU Metrics                             │  SNS Topic    │
+        └───────────────────────────────────────────►───────┬───────┘
+                                                            │
+                                                            ▼
+                                                    ┌───────────────┐
+                                                    │ n8n Webhook   │
+                                                    │ (Alert Handler│
+                                                    │ + AI Agent)   │
+                                                    └───────────────┘
 ```
 
 ## Prerequisites
@@ -124,7 +127,7 @@ aws sns subscribe \
 
 ### provision
 
-Creates an EC2 instance for a workshop participant.
+Creates an EC2 instance for a workshop participant with disk and CPU monitoring.
 
 **Input:**
 ```json
@@ -142,16 +145,17 @@ Creates an EC2 instance for a workshop participant.
   "public_ip": "54.123.45.67",
   "username": "user123",
   "exists": false,
-  "alarm_name": "workshop-user123-disk-high",
+  "alarm_names": ["workshop-user123-disk-high", "workshop-user123-cpu-high"],
   "message": "Instance provisioned successfully"
 }
 ```
 
 **What it does:**
 - Checks if user already has an instance (prevents duplicates)
-- Creates t3.micro EC2 with 8GB gp3 volume
-- Installs and configures CloudWatch Agent for disk metrics
+- Creates t3.micro EC2 with 30GB gp3 volume
+- Installs CloudWatch Agent for disk metrics and stress-ng for CPU testing
 - Creates CloudWatch alarm for disk usage > 80%
+- Creates CloudWatch alarm for CPU utilization > 80%
 - Tags resources with workshop-user for tracking
 
 ---
@@ -235,17 +239,76 @@ Terminates a user's instance and cleans up resources.
 ```json
 {
   "success": true,
-  "instance_id": "i-0123456789abcdef0",
+  "terminated_instances": ["i-0123456789abcdef0"],
+  "deleted_alarms": ["workshop-user123-disk-high", "workshop-user123-cpu-high"],
   "username": "user123",
-  "alarm_deleted": true,
-  "message": "Instance terminated and alarm deleted"
+  "message": "Teardown complete. Terminated 1 instance(s)."
 }
 ```
 
 **What it does:**
 - Finds instances by workshop-user tag
 - Terminates the EC2 instance
-- Deletes the associated CloudWatch alarm
+- Deletes both disk and CPU CloudWatch alarms
+
+---
+
+### spike_cpu
+
+Triggers a CPU spike on a user's instance using stress-ng.
+
+**Input:**
+```json
+{
+  "username": "user123"
+}
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "instance_id": "i-0123456789abcdef0",
+  "username": "user123",
+  "message": "CPU stress started - running for 300 seconds"
+}
+```
+
+**What it does:**
+- Finds the user's running instance
+- Uses SSM SendCommand to run: `stress-ng --cpu 2 --timeout 300s &`
+- Stress runs for 5 minutes in the background
+- Triggers the CPU high alarm (> 80% threshold)
+
+---
+
+### kill_and_restart
+
+Kills runaway processes and reboots the instance (remediation action).
+
+**Input:**
+```json
+{
+  "username": "user123"
+}
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "instance_id": "i-0123456789abcdef0",
+  "username": "user123",
+  "actions": ["killed stress-ng", "rebooted instance"],
+  "message": "Process killed and instance rebooted"
+}
+```
+
+**What it does:**
+- Finds the user's running instance
+- Uses SSM SendCommand to run: `pkill -9 stress-ng || true`
+- Reboots the instance using EC2 API
+- Useful as an AI agent remediation action for CPU alerts
 
 ## Testing Lambda Functions
 
@@ -266,6 +329,18 @@ aws lambda invoke --function-name n8n-workshop-devops-fill-disk \
 
 # Reset the disk
 aws lambda invoke --function-name n8n-workshop-devops-reset-disk \
+  --payload '{"username": "testuser"}' \
+  --cli-binary-format raw-in-base64-out \
+  response.json && cat response.json
+
+# Spike the CPU (triggers CPU alarm after ~1-2 minutes)
+aws lambda invoke --function-name n8n-workshop-devops-spike-cpu \
+  --payload '{"username": "testuser"}' \
+  --cli-binary-format raw-in-base64-out \
+  response.json && cat response.json
+
+# Kill stress-ng and reboot instance (remediation)
+aws lambda invoke --function-name n8n-workshop-devops-kill-and-restart \
   --payload '{"username": "testuser"}' \
   --cli-binary-format raw-in-base64-out \
   response.json && cat response.json
@@ -302,13 +377,24 @@ When a CloudWatch alarm triggers, n8n receives a payload like:
 }
 ```
 
-### Suggested n8n Workflow
+### Suggested n8n Workflows
 
+**Basic Alert Workflow:**
 1. **Webhook Trigger** - Receives SNS notifications
 2. **Parse Message** - Extract alarm details from JSON
 3. **Switch Node** - Route based on alarm state (ALARM/OK)
 4. **Notify** - Send Slack/email/Teams notification
 5. **Optional: Auto-remediate** - Call reset_disk Lambda
+
+**AI Agent Remediation Workflow (CPU Alerts):**
+1. **Webhook Trigger** - Receives CPU alarm from SNS
+2. **Parse Message** - Extract alarm name and instance details
+3. **AI Agent Node** - Decides remediation action based on context
+4. **Tool Nodes** - Available actions for AI to choose:
+   - `kill_and_restart` - Kill stress-ng and reboot instance
+   - `reset_disk` - Clear disk space (if disk-related)
+   - Notify only - Just send alert without remediation
+5. **Notify** - Send result to Slack/Teams
 
 ## File Structure
 
@@ -330,7 +416,11 @@ n8n-workshop-devops/
     │   └── lambda_function.py
     ├── fill_disk/
     │   └── lambda_function.py
-    └── reset_disk/
+    ├── reset_disk/
+    │   └── lambda_function.py
+    ├── spike_cpu/
+    │   └── lambda_function.py
+    └── kill_and_restart/
         └── lambda_function.py
 ```
 
@@ -347,6 +437,10 @@ n8n-workshop-devops/
 | `lambda_fill_disk_name` | Fill disk Lambda name |
 | `lambda_reset_disk_arn` | Reset disk Lambda ARN |
 | `lambda_reset_disk_name` | Reset disk Lambda name |
+| `lambda_spike_cpu_arn` | Spike CPU Lambda ARN |
+| `lambda_spike_cpu_name` | Spike CPU Lambda name |
+| `lambda_kill_and_restart_arn` | Kill and restart Lambda ARN |
+| `lambda_kill_and_restart_name` | Kill and restart Lambda name |
 | `security_group_id` | Security group ID |
 | `ec2_instance_profile_arn` | EC2 instance profile ARN |
 | `ec2_role_arn` | EC2 IAM role ARN |

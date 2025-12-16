@@ -26,6 +26,18 @@ data "archive_file" "reset_disk" {
   output_path = "${path.module}/lambda_functions/reset_disk.zip"
 }
 
+data "archive_file" "spike_cpu" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda_functions/spike_cpu"
+  output_path = "${path.module}/lambda_functions/spike_cpu.zip"
+}
+
+data "archive_file" "kill_and_restart" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda_functions/kill_and_restart"
+  output_path = "${path.module}/lambda_functions/kill_and_restart.zip"
+}
+
 # -----------------------------------------------------------------------------
 # Lambda Functions
 # -----------------------------------------------------------------------------
@@ -113,6 +125,42 @@ resource "aws_lambda_function" "reset_disk" {
   }
 }
 
+# Spike CPU Lambda - Uses SSM to trigger CPU stress using stress-ng
+resource "aws_lambda_function" "spike_cpu" {
+  function_name    = "${var.project_name}-spike-cpu"
+  description      = "Triggers CPU spike on workshop EC2 instance using stress-ng"
+  role             = aws_iam_role.lambda.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 256
+  filename         = data.archive_file.spike_cpu.output_path
+  source_code_hash = data.archive_file.spike_cpu.output_base64sha256
+
+  tags = {
+    Name    = "${var.project_name}-spike-cpu"
+    Project = var.project_name
+  }
+}
+
+# Kill and Restart Lambda - Kills runaway processes and reboots instance
+resource "aws_lambda_function" "kill_and_restart" {
+  function_name    = "${var.project_name}-kill-and-restart"
+  description      = "Kills runaway processes and restarts workshop EC2 instance"
+  role             = aws_iam_role.lambda.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 256
+  filename         = data.archive_file.kill_and_restart.output_path
+  source_code_hash = data.archive_file.kill_and_restart.output_base64sha256
+
+  tags = {
+    Name    = "${var.project_name}-kill-and-restart"
+    Project = var.project_name
+  }
+}
+
 # -----------------------------------------------------------------------------
 # CloudWatch Log Groups for Lambda Functions
 # -----------------------------------------------------------------------------
@@ -146,6 +194,24 @@ resource "aws_cloudwatch_log_group" "fill_disk" {
 
 resource "aws_cloudwatch_log_group" "reset_disk" {
   name              = "/aws/lambda/${aws_lambda_function.reset_disk.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Project = var.project_name
+  }
+}
+
+resource "aws_cloudwatch_log_group" "spike_cpu" {
+  name              = "/aws/lambda/${aws_lambda_function.spike_cpu.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Project = var.project_name
+  }
+}
+
+resource "aws_cloudwatch_log_group" "kill_and_restart" {
+  name              = "/aws/lambda/${aws_lambda_function.kill_and_restart.function_name}"
   retention_in_days = 7
 
   tags = {

@@ -43,7 +43,8 @@ data "aws_iam_policy_document" "lambda_permissions" {
       "ec2:DescribeInstances",
       "ec2:DescribeInstanceStatus",
       "ec2:CreateTags",
-      "ec2:DescribeTags"
+      "ec2:DescribeTags",
+      "ec2:RebootInstances"
     ]
     resources = ["*"]
   }

@@ -47,6 +47,26 @@ output "lambda_reset_disk_name" {
   value       = aws_lambda_function.reset_disk.function_name
 }
 
+output "lambda_spike_cpu_arn" {
+  description = "ARN of the spike_cpu Lambda function"
+  value       = aws_lambda_function.spike_cpu.arn
+}
+
+output "lambda_spike_cpu_name" {
+  description = "Name of the spike_cpu Lambda function"
+  value       = aws_lambda_function.spike_cpu.function_name
+}
+
+output "lambda_kill_and_restart_arn" {
+  description = "ARN of the kill_and_restart Lambda function"
+  value       = aws_lambda_function.kill_and_restart.arn
+}
+
+output "lambda_kill_and_restart_name" {
+  description = "Name of the kill_and_restart Lambda function"
+  value       = aws_lambda_function.kill_and_restart.function_name
+}
+
 output "security_group_id" {
   description = "Security group ID for workshop EC2 instances"
   value       = aws_security_group.workshop.id
