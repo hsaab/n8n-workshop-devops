@@ -62,6 +62,7 @@ resource "aws_lambda_function" "provision" {
       INSTANCE_PROFILE_ARN = aws_iam_instance_profile.ec2.arn
       SNS_TOPIC_ARN        = aws_sns_topic.workshop_alerts.arn
       DISK_THRESHOLD       = var.disk_threshold_percent
+      ALARM_PERIOD         = var.alarm_period_seconds
     }
   }
 

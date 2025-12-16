@@ -14,6 +14,7 @@ SECURITY_GROUP_ID = os.environ.get('SECURITY_GROUP_ID')
 INSTANCE_PROFILE_ARN = os.environ.get('INSTANCE_PROFILE_ARN')
 SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
 DISK_THRESHOLD = int(os.environ.get('DISK_THRESHOLD', '80'))
+ALARM_PERIOD = int(os.environ.get('ALARM_PERIOD', '10'))
 
 # CloudWatch Agent user data script
 USER_DATA = '''#!/bin/bash
@@ -177,7 +178,7 @@ def lambda_handler(event, context):
                     'Value': 'xfs'
                 }
             ],
-            Period=60,
+            Period=ALARM_PERIOD,
             EvaluationPeriods=1,
             Threshold=DISK_THRESHOLD,
             ComparisonOperator='GreaterThanThreshold',
@@ -197,7 +198,7 @@ def lambda_handler(event, context):
             Dimensions=[
                 {'Name': 'InstanceId', 'Value': instance_id}
             ],
-            Period=60,
+            Period=ALARM_PERIOD,
             EvaluationPeriods=1,
             Threshold=80,
             ComparisonOperator='GreaterThanThreshold',

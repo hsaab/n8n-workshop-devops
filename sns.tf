@@ -4,10 +4,10 @@
 # -----------------------------------------------------------------------------
 
 resource "aws_sns_topic" "workshop_alerts" {
-  name = "${var.project_name}-disk-alerts"
+  name = "${var.project_name}-alerts"
 
   tags = {
-    Name    = "${var.project_name}-disk-alerts"
+    Name    = "${var.project_name}-alerts"
     Project = var.project_name
   }
 }
