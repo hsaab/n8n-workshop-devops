@@ -25,10 +25,15 @@ cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json << 'EOF'
   "metrics": {
     "namespace": "Workshop",
     "metrics_collected": {
+      "cpu": {
+        "measurement": ["usage_active"],
+        "totalcpu": true,
+        "metrics_collection_interval": 10
+      },
       "disk": {
         "measurement": ["used_percent"],
         "resources": ["/"],
-        "metrics_collection_interval": 60
+        "metrics_collection_interval": 10
       }
     },
     "append_dimensions": {
@@ -192,11 +197,12 @@ def lambda_handler(event, context):
             AlarmDescription=f'CPU usage alert for workshop user {safe_username}',
             ActionsEnabled=True,
             AlarmActions=[SNS_TOPIC_ARN],
-            MetricName='CPUUtilization',
-            Namespace='AWS/EC2',
+            MetricName='cpu_usage_active',
+            Namespace='Workshop',
             Statistic='Average',
             Dimensions=[
-                {'Name': 'InstanceId', 'Value': instance_id}
+                {'Name': 'InstanceId', 'Value': instance_id},
+                {'Name': 'cpu', 'Value': 'cpu-total'}
             ],
             Period=ALARM_PERIOD,
             EvaluationPeriods=1,

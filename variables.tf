@@ -38,7 +38,7 @@ variable "disk_threshold_percent" {
 }
 
 variable "alarm_period_seconds" {
-  description = "CloudWatch alarm evaluation period in seconds (10 for high-resolution, 60 for standard)"
+  description = "CloudWatch alarm evaluation period in seconds (must match CloudWatch agent collection interval)"
   type        = number
   default     = 10
 }
