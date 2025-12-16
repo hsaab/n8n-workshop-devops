@@ -57,8 +57,8 @@ def lambda_handler(event, context):
             }
 
         # Send SSM command to trigger CPU stress
-        # Run stress-ng in background for 300 seconds (5 minutes)
-        command = 'nohup stress-ng --cpu 2 --timeout 300s > /dev/null 2>&1 & disown'
+        # Run stress-ng in background for 1800 seconds (30 minutes)
+        command = 'nohup stress-ng --cpu 2 --timeout 1800s > /dev/null 2>&1 & disown'
 
         print(f"Sending SSM command to instance {instance_id}: {command}")
 
@@ -97,7 +97,7 @@ def lambda_handler(event, context):
                             'success': True,
                             'instance_id': instance_id,
                             'username': safe_username,
-                            'message': 'CPU stress started - running for 300 seconds'
+                            'message': 'CPU stress started - running for 30 minutes'
                         }
                     else:
                         return {
