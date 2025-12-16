@@ -1,0 +1,32 @@
+# -----------------------------------------------------------------------------
+# Workshop Infrastructure Variables
+# -----------------------------------------------------------------------------
+# Copy this file to terraform.tfvars and fill in your values
+# -----------------------------------------------------------------------------
+
+# AWS Region (default: us-east-1)
+aws_region = "us-east-1"
+
+# Project name prefix for all resources (default: workshop)
+project_name = "workshop"
+
+# Amazon Linux 2023 AMI ID for your region
+# Find the latest AMI ID in your region:
+# aws ec2 describe-images --owners amazon --filters "Name=name,Values=al2023-ami-*-x86_64" --query 'sort_by(Images, &CreationDate)[-1].ImageId' --output text
+ami_id = "ami-0123456789abcdef0"
+
+# VPC ID where resources will be created
+# Find your default VPC:
+# aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query 'Vpcs[0].VpcId' --output text
+vpc_id = "vpc-0123456789abcdef0"
+
+# Public subnet ID for EC2 instances (must have auto-assign public IP enabled for SSM)
+# Find subnets in your VPC:
+# aws ec2 describe-subnets --filters "Name=vpc-id,Values=YOUR_VPC_ID" --query 'Subnets[*].[SubnetId,AvailabilityZone,MapPublicIpOnLaunch]' --output table
+subnet_id = "subnet-0123456789abcdef0"
+
+# EC2 instance type (default: t3.micro)
+instance_type = "t3.micro"
+
+# Disk usage threshold percentage for CloudWatch alarm (default: 80)
+disk_threshold_percent = 80
