@@ -57,7 +57,8 @@ def lambda_handler(event, context):
             }
 
         # Send SSM command to remove filler files
-        command = 'rm -f /tmp/filler*.dat && df -h /'
+        # Note: fill_disk uses /var/tmp because /tmp is often tmpfs (RAM-based)
+        command = 'rm -f /var/tmp/filler*.dat && df -h /'
 
         print(f"Sending SSM command to instance {instance_id}: {command}")
 

@@ -253,25 +253,25 @@ Terminates a user's instance and cleans up resources.
 
 ```bash
 # Provision an instance
-aws lambda invoke --function-name workshop-provision \
+aws lambda invoke --function-name n8n-workshop-devops-provision \
   --payload '{"username": "testuser"}' \
   --cli-binary-format raw-in-base64-out \
   response.json && cat response.json
 
 # Fill the disk (wait ~5 min for CloudWatch agent to start)
-aws lambda invoke --function-name workshop-fill-disk \
+aws lambda invoke --function-name n8n-workshop-devops-fill-disk \
   --payload '{"username": "testuser"}' \
   --cli-binary-format raw-in-base64-out \
   response.json && cat response.json
 
 # Reset the disk
-aws lambda invoke --function-name workshop-reset-disk \
+aws lambda invoke --function-name n8n-workshop-devops-reset-disk \
   --payload '{"username": "testuser"}' \
   --cli-binary-format raw-in-base64-out \
   response.json && cat response.json
 
 # Teardown the instance
-aws lambda invoke --function-name workshop-teardown \
+aws lambda invoke --function-name n8n-workshop-devops-teardown \
   --payload '{"username": "testuser"}' \
   --cli-binary-format raw-in-base64-out \
   response.json && cat response.json

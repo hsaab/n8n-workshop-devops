@@ -57,7 +57,9 @@ def lambda_handler(event, context):
             }
 
         # Send SSM command to fill disk
-        command = 'fallocate -l 6G /tmp/filler.dat && df -h /'
+        # Create 25GB file to push 30GB disk past 80% threshold
+        # Note: Use /var/tmp instead of /tmp because /tmp is often tmpfs (RAM-based)
+        command = 'fallocate -l 25G /var/tmp/filler.dat && df -h /'
 
         print(f"Sending SSM command to instance {instance_id}: {command}")
 

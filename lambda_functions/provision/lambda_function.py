@@ -109,7 +109,7 @@ def lambda_handler(event, context):
                 {
                     'DeviceName': '/dev/xvda',
                     'Ebs': {
-                        'VolumeSize': 8,
+                        'VolumeSize': 30,
                         'VolumeType': 'gp3',
                         'DeleteOnTermination': True
                     }
@@ -170,7 +170,7 @@ def lambda_handler(event, context):
                 },
                 {
                     'Name': 'device',
-                    'Value': 'xvda1'
+                    'Value': 'nvme0n1p1'
                 },
                 {
                     'Name': 'fstype',
