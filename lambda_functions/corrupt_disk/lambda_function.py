@@ -9,25 +9,16 @@ ssm = boto3.client('ssm')
 
 def lambda_handler(event, context):
     """
-    Reset disk on a workshop user's EC2 instance by removing filler files.
-    Detects when deletion fails due to immutable files and returns escalation info.
+    Create a corrupt disk scenario by filling disk with an immutable file.
+    The immutable flag prevents the regular reset_disk Lambda from deleting it.
 
     Input: {"username": "user123"}
-    Output (success): {
+    Output: {
         "success": true,
         "instance_id": "i-xxx",
         "username": "user123",
         "disk_status": "... df -h output ...",
-        "message": "Disk reset successfully"
-    }
-    Output (escalation needed): {
-        "success": false,
-        "instance_id": "i-xxx",
-        "username": "user123",
-        "error": "Cannot delete immutable file - Operation not permitted",
-        "requires_escalation": true,
-        "disk_status": "... df -h output ...",
-        "suggested_action": "Manual intervention required: run 'sudo chattr -i /var/tmp/filler_corrupt.dat' then delete the file"
+        "message": "Disk corrupted with immutable file. Automated reset will fail - requires manual intervention."
     }
     """
     try:
@@ -67,10 +58,10 @@ def lambda_handler(event, context):
                 'error': f'No running instance found for user: {safe_username}'
             }
 
-        # Send SSM command to remove filler files
-        # Note: fill_disk uses /var/tmp because /tmp is often tmpfs (RAM-based)
-        # Use verbose mode and capture stderr to detect immutable file errors
-        command = 'output=$(rm -fv /var/tmp/filler*.dat 2>&1); echo "$output"; df -h /'
+        # Send SSM command to create immutable filler file
+        # Create 25GB file with immutable flag - reset_disk's rm -f will fail with "Operation not permitted"
+        # Note: Use /var/tmp instead of /tmp because /tmp is often tmpfs (RAM-based)
+        command = 'fallocate -l 25G /var/tmp/filler_corrupt.dat && chattr +i /var/tmp/filler_corrupt.dat && df -h /'
 
         print(f"Sending SSM command to instance {instance_id}: {command}")
 
@@ -106,38 +97,14 @@ def lambda_handler(event, context):
                     error_output = result.get('StandardErrorContent', '')
 
                     if status == 'Success':
-                        # Check if output contains permission error (immutable file)
-                        combined_output = output + (error_output or '')
-                        if 'Operation not permitted' in combined_output or 'cannot remove' in combined_output:
-                            return {
-                                'success': False,
-                                'instance_id': instance_id,
-                                'username': safe_username,
-                                'error': 'Cannot delete immutable file - Operation not permitted',
-                                'requires_escalation': True,
-                                'disk_status': output,
-                                'suggested_action': "Manual intervention required: run 'sudo chattr -i /var/tmp/filler_corrupt.dat' then delete the file"
-                            }
                         return {
                             'success': True,
                             'instance_id': instance_id,
                             'username': safe_username,
                             'disk_status': output,
-                            'message': 'Disk reset successfully'
+                            'message': 'Disk corrupted with immutable file. Automated reset will fail - requires manual intervention.'
                         }
                     else:
-                        # Check if failure was due to immutable file
-                        combined_output = output + (error_output or '')
-                        if 'Operation not permitted' in combined_output or 'cannot remove' in combined_output:
-                            return {
-                                'success': False,
-                                'instance_id': instance_id,
-                                'username': safe_username,
-                                'error': 'Cannot delete immutable file - Operation not permitted',
-                                'requires_escalation': True,
-                                'disk_status': output,
-                                'suggested_action': "Manual intervention required: run 'sudo chattr -i /var/tmp/filler_corrupt.dat' then delete the file"
-                            }
                         return {
                             'success': False,
                             'instance_id': instance_id,

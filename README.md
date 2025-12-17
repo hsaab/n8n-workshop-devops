@@ -14,20 +14,20 @@ This project creates AWS infrastructure that allows workshop participants to:
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│                                     n8n Workflow                                          │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐ │
-│  │ Provision│ │Fill Disk │ │Reset Disk│ │Spike CPU │ │ Teardown │ │ Kill and Restart  │ │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────────┬─────────┘ │
-└───────┼────────────┼────────────┼────────────┼────────────┼─────────────────┼────────────┘
-        │            │            │            │            │                 │
-        ▼            ▼            ▼            ▼            ▼                 ▼
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  AWS Lambda Functions                                     │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐ │
-│  │ provision│ │fill_disk │ │reset_disk│ │spike_cpu │ │ teardown │ │ kill_and_restart  │ │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────────┬─────────┘ │
-└───────┼────────────┼────────────┼────────────┼────────────┼─────────────────┼────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                      n8n Workflow                                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────────────┐ ┌─────────────┐ ┌─────────────────┐ │
+│  │ Provision│ │Fill Disk │ │Reset Disk│ │Spike CPU │ │ Teardown │ │Kill and Restart │ │Corrupt Disk │ │Fix Corrupt Disk │ │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────────┬────────┘ └──────┬──────┘ └────────┬────────┘ │
+└───────┼────────────┼────────────┼────────────┼────────────┼────────────────┼────────────────┼──────────────────┼──────────┘
+        │            │            │            │            │                │                │                  │
+        ▼            ▼            ▼            ▼            ▼                ▼                ▼                  ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                   AWS Lambda Functions                                                     │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────────────┐ ┌─────────────┐ ┌─────────────────┐ │
+│  │ provision│ │fill_disk │ │reset_disk│ │spike_cpu │ │ teardown │ │kill_and_restart │ │corrupt_disk │ │fix_corrupt_disk │ │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────────┬────────┘ └──────┬──────┘ └────────┬────────┘ │
+└───────┼────────────┼────────────┼────────────┼────────────┼────────────────┼────────────────┼──────────────────┼──────────┘
         │            │            │            │            │                 │
         ▼            │            │            │            ▼                 │
 ┌───────────────┐    │            │            │    ┌───────────────┐         │
@@ -194,7 +194,7 @@ Fills the disk on a user's instance to trigger the CloudWatch alarm.
 
 ### reset_disk
 
-Removes filler files to reset disk usage.
+Removes filler files to reset disk usage. Detects immutable files and returns escalation info when deletion fails.
 
 **Input:**
 ```json
@@ -203,23 +203,35 @@ Removes filler files to reset disk usage.
 }
 ```
 
-**Output:**
+**Output (success):**
 ```json
 {
   "success": true,
   "instance_id": "i-0123456789abcdef0",
   "username": "user123",
-  "command_id": "abc123-def456",
-  "status": "Success",
-  "output": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/xvda1      8.0G  1.2G  6.8G  15% /",
+  "disk_status": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/xvda1      8.0G  1.2G  6.8G  15% /",
   "message": "Disk reset successfully"
+}
+```
+
+**Output (escalation needed):**
+```json
+{
+  "success": false,
+  "instance_id": "i-0123456789abcdef0",
+  "username": "user123",
+  "error": "Cannot delete immutable file - Operation not permitted",
+  "requires_escalation": true,
+  "disk_status": "...",
+  "suggested_action": "Manual intervention required: run 'sudo chattr -i /var/tmp/filler_corrupt.dat' then delete the file"
 }
 ```
 
 **What it does:**
 - Finds the user's running instance
-- Uses SSM SendCommand: `rm -f /tmp/filler*.dat`
-- Waits for command completion
+- Uses SSM SendCommand: `rm -fv /var/tmp/filler*.dat`
+- Detects permission errors from immutable files
+- Returns escalation info if automated remediation fails
 - Returns disk usage status
 
 ---
@@ -310,6 +322,68 @@ Kills runaway processes and reboots the instance (remediation action).
 - Reboots the instance using EC2 API
 - Useful as an AI agent remediation action for CPU alerts
 
+---
+
+### corrupt_disk
+
+Creates a filler file with the immutable flag set, so the regular reset_disk Lambda cannot delete it. Used to demonstrate escalation scenarios.
+
+**Input:**
+```json
+{
+  "username": "user123"
+}
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "instance_id": "i-0123456789abcdef0",
+  "username": "user123",
+  "disk_status": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/xvda1      30G   26G  4.0G  87% /",
+  "message": "Disk corrupted with immutable file. Automated reset will fail - requires manual intervention."
+}
+```
+
+**What it does:**
+- Finds the user's running instance
+- Uses SSM SendCommand: `fallocate -l 25G /var/tmp/filler_corrupt.dat && chattr +i /var/tmp/filler_corrupt.dat`
+- Creates a 25GB file with the immutable attribute
+- When reset_disk tries to delete it, it will fail with "Operation not permitted"
+- Demonstrates scenarios where automated remediation fails
+
+---
+
+### fix_corrupt_disk
+
+Admin-only function that removes the immutable flag and deletes all filler files. This is the "human intervention" that fixes what the automated reset_disk couldn't.
+
+**Input:**
+```json
+{
+  "username": "user123"
+}
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "instance_id": "i-0123456789abcdef0",
+  "username": "user123",
+  "disk_status": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/xvda1      30G  1.2G   29G   4% /",
+  "message": "Corrupt disk fixed. Immutable flag removed and files deleted."
+}
+```
+
+**What it does:**
+- Finds the user's running instance
+- Uses SSM SendCommand: `chattr -i /var/tmp/filler_corrupt.dat && rm -f /var/tmp/filler*.dat`
+- Removes the immutable flag from the corrupt file
+- Deletes all filler files
+- Represents the escalation path when AI agent remediation fails
+
 ## Testing Lambda Functions
 
 ### Via AWS CLI
@@ -341,6 +415,24 @@ aws lambda invoke --function-name n8n-workshop-devops-spike-cpu \
 
 # Kill stress-ng and reboot instance (remediation)
 aws lambda invoke --function-name n8n-workshop-devops-kill-and-restart \
+  --payload '{"username": "testuser"}' \
+  --cli-binary-format raw-in-base64-out \
+  response.json && cat response.json
+
+# Corrupt the disk with immutable file (escalation demo)
+aws lambda invoke --function-name n8n-workshop-devops-corrupt-disk \
+  --payload '{"username": "testuser"}' \
+  --cli-binary-format raw-in-base64-out \
+  response.json && cat response.json
+
+# Try reset_disk - will fail with requires_escalation=true
+aws lambda invoke --function-name n8n-workshop-devops-reset-disk \
+  --payload '{"username": "testuser"}' \
+  --cli-binary-format raw-in-base64-out \
+  response.json && cat response.json
+
+# Fix corrupt disk (admin escalation)
+aws lambda invoke --function-name n8n-workshop-devops-fix-corrupt-disk \
   --payload '{"username": "testuser"}' \
   --cli-binary-format raw-in-base64-out \
   response.json && cat response.json
@@ -420,7 +512,11 @@ n8n-workshop-devops/
     │   └── lambda_function.py
     ├── spike_cpu/
     │   └── lambda_function.py
-    └── kill_and_restart/
+    ├── kill_and_restart/
+    │   └── lambda_function.py
+    ├── corrupt_disk/
+    │   └── lambda_function.py
+    └── fix_corrupt_disk/
         └── lambda_function.py
 ```
 
@@ -441,6 +537,10 @@ n8n-workshop-devops/
 | `lambda_spike_cpu_name` | Spike CPU Lambda name |
 | `lambda_kill_and_restart_arn` | Kill and restart Lambda ARN |
 | `lambda_kill_and_restart_name` | Kill and restart Lambda name |
+| `lambda_corrupt_disk_arn` | Corrupt disk Lambda ARN |
+| `lambda_corrupt_disk_name` | Corrupt disk Lambda name |
+| `lambda_fix_corrupt_disk_arn` | Fix corrupt disk Lambda ARN |
+| `lambda_fix_corrupt_disk_name` | Fix corrupt disk Lambda name |
 | `security_group_id` | Security group ID |
 | `ec2_instance_profile_arn` | EC2 instance profile ARN |
 | `ec2_role_arn` | EC2 IAM role ARN |

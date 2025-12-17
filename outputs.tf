@@ -67,6 +67,26 @@ output "lambda_kill_and_restart_name" {
   value       = aws_lambda_function.kill_and_restart.function_name
 }
 
+output "lambda_corrupt_disk_arn" {
+  description = "ARN of the corrupt_disk Lambda function"
+  value       = aws_lambda_function.corrupt_disk.arn
+}
+
+output "lambda_corrupt_disk_name" {
+  description = "Name of the corrupt_disk Lambda function"
+  value       = aws_lambda_function.corrupt_disk.function_name
+}
+
+output "lambda_fix_corrupt_disk_arn" {
+  description = "ARN of the fix_corrupt_disk Lambda function"
+  value       = aws_lambda_function.fix_corrupt_disk.arn
+}
+
+output "lambda_fix_corrupt_disk_name" {
+  description = "Name of the fix_corrupt_disk Lambda function"
+  value       = aws_lambda_function.fix_corrupt_disk.function_name
+}
+
 output "security_group_id" {
   description = "Security group ID for workshop EC2 instances"
   value       = aws_security_group.workshop.id

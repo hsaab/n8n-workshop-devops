@@ -38,6 +38,18 @@ data "archive_file" "kill_and_restart" {
   output_path = "${path.module}/lambda_functions/kill_and_restart.zip"
 }
 
+data "archive_file" "corrupt_disk" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda_functions/corrupt_disk"
+  output_path = "${path.module}/lambda_functions/corrupt_disk.zip"
+}
+
+data "archive_file" "fix_corrupt_disk" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda_functions/fix_corrupt_disk"
+  output_path = "${path.module}/lambda_functions/fix_corrupt_disk.zip"
+}
+
 # -----------------------------------------------------------------------------
 # Lambda Functions
 # -----------------------------------------------------------------------------
@@ -162,6 +174,42 @@ resource "aws_lambda_function" "kill_and_restart" {
   }
 }
 
+# Corrupt Disk Lambda - Creates immutable filler file that reset_disk cannot delete
+resource "aws_lambda_function" "corrupt_disk" {
+  function_name    = "${var.project_name}-corrupt-disk"
+  description      = "Creates immutable filler file to simulate escalation scenario"
+  role             = aws_iam_role.lambda.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 256
+  filename         = data.archive_file.corrupt_disk.output_path
+  source_code_hash = data.archive_file.corrupt_disk.output_base64sha256
+
+  tags = {
+    Name    = "${var.project_name}-corrupt-disk"
+    Project = var.project_name
+  }
+}
+
+# Fix Corrupt Disk Lambda - Admin function to remove immutable flag and delete files
+resource "aws_lambda_function" "fix_corrupt_disk" {
+  function_name    = "${var.project_name}-fix-corrupt-disk"
+  description      = "Removes immutable flag and deletes filler files (admin escalation)"
+  role             = aws_iam_role.lambda.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 60
+  memory_size      = 256
+  filename         = data.archive_file.fix_corrupt_disk.output_path
+  source_code_hash = data.archive_file.fix_corrupt_disk.output_base64sha256
+
+  tags = {
+    Name    = "${var.project_name}-fix-corrupt-disk"
+    Project = var.project_name
+  }
+}
+
 # -----------------------------------------------------------------------------
 # CloudWatch Log Groups for Lambda Functions
 # -----------------------------------------------------------------------------
@@ -213,6 +261,24 @@ resource "aws_cloudwatch_log_group" "spike_cpu" {
 
 resource "aws_cloudwatch_log_group" "kill_and_restart" {
   name              = "/aws/lambda/${aws_lambda_function.kill_and_restart.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Project = var.project_name
+  }
+}
+
+resource "aws_cloudwatch_log_group" "corrupt_disk" {
+  name              = "/aws/lambda/${aws_lambda_function.corrupt_disk.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Project = var.project_name
+  }
+}
+
+resource "aws_cloudwatch_log_group" "fix_corrupt_disk" {
+  name              = "/aws/lambda/${aws_lambda_function.fix_corrupt_disk.function_name}"
   retention_in_days = 7
 
   tags = {
