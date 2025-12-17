@@ -184,3 +184,8 @@ resource "aws_iam_policy" "lambda_invoke" {
     Project = var.project_name
   }
 }
+
+resource "aws_iam_user_policy_attachment" "n8n_workshop_user_lambda_invoke" {
+  user       = "n8n-workshop-user"
+  policy_arn = aws_iam_policy.lambda_invoke.arn
+}
