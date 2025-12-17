@@ -137,3 +137,50 @@ resource "aws_iam_instance_profile" "ec2" {
     Project = var.project_name
   }
 }
+
+# -----------------------------------------------------------------------------
+# Lambda Invoke Policy (for n8n workflow to invoke Lambda functions)
+# -----------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "lambda_invoke" {
+  statement {
+    sid       = "ListLambdaFunctions"
+    effect    = "Allow"
+    actions   = ["lambda:ListFunctions"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid     = "InvokeWorkshopLambdas"
+    effect  = "Allow"
+    actions = ["lambda:InvokeFunction"]
+    resources = [
+      aws_lambda_function.provision.arn,
+      "${aws_lambda_function.provision.arn}:*",
+      aws_lambda_function.teardown.arn,
+      "${aws_lambda_function.teardown.arn}:*",
+      aws_lambda_function.fill_disk.arn,
+      "${aws_lambda_function.fill_disk.arn}:*",
+      aws_lambda_function.reset_disk.arn,
+      "${aws_lambda_function.reset_disk.arn}:*",
+      aws_lambda_function.spike_cpu.arn,
+      "${aws_lambda_function.spike_cpu.arn}:*",
+      aws_lambda_function.kill_and_restart.arn,
+      "${aws_lambda_function.kill_and_restart.arn}:*",
+      aws_lambda_function.corrupt_disk.arn,
+      "${aws_lambda_function.corrupt_disk.arn}:*",
+      aws_lambda_function.fix_corrupt_disk.arn,
+      "${aws_lambda_function.fix_corrupt_disk.arn}:*",
+    ]
+  }
+}
+
+resource "aws_iam_policy" "lambda_invoke" {
+  name        = "${var.project_name}-lambda-invoke"
+  description = "Policy to invoke workshop Lambda functions"
+  policy      = data.aws_iam_policy_document.lambda_invoke.json
+
+  tags = {
+    Project = var.project_name
+  }
+}
